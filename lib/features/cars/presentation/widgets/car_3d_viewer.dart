@@ -34,11 +34,11 @@ class Car3DViewer extends StatelessWidget {
         maxCameraOrbit: 'auto auto 100%',
         minFieldOfView: '30deg',
         maxFieldOfView: '90deg',
-        interactionPrompt: 'auto',
-        interactionPromptStyle: 'basic',
-        loading: 'eager',
-        reveal: 'interaction',
-        touchAction: 'pan-y',
+        interactionPrompt: InteractionPrompt.auto,
+        interactionPromptStyle: InteractionPromptStyle.basic,
+        loading: Loading.eager,
+        reveal: Reveal.interaction,
+        touchAction: TouchAction.panY,
         cameraTarget: '0 0 0',
         cameraOrbit: '0 75deg 105%',
         fieldOfView: '45deg',
@@ -47,19 +47,9 @@ class Car3DViewer extends StatelessWidget {
         orientation: '0 0 0',
         scale: '1 1 1',
         skyboxImage: 'neutral',
-        skyboxHeight: '1000m',
-        skyboxWidth: '1000m',
-        skyboxDepth: '1000m',
-        toneMapped: true,
-        toneMappingExposure: 1,
-        toneMappingWhitePoint: 1,
         variantName: '',
-        variantSelected: '',
-        variants: const [],
-        onError: (error) {
-          debugPrint('Error loading 3D model: $error');
-        },
+        // Removed unsupported 'onModelError' parameter
       ),
     );
   }
-} 
+}

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:carento/core/constants/app_constants.dart';
 import 'package:carento/features/auth/presentation/screens/login_screen.dart';
+import 'package:carento/features/profile/presentation/screens/preferences_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -17,143 +18,64 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+      ),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('Personal Information'),
+            onTap: () {
+              // TODO: Navigate to personal information screen
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('Car Preferences'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PreferencesScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.payment),
+            title: const Text('Payment Methods'),
+            onTap: () {
+              // TODO: Navigate to payment methods screen
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications),
+            title: const Text('Notifications'),
+            onTap: () {
+              // TODO: Navigate to notifications screen
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.help),
+            title: const Text('Help & Support'),
+            onTap: () {
+              // TODO: Navigate to help & support screen
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Sign Out'),
+            onTap: () async {
+              try {
+                await FirebaseAuth.instance.signOut();
+                Navigator.pushReplacementNamed(context, '/login');
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error signing out: $e')),
                 );
               }
             },
           ),
         ],
-      ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection(AppConstants.usersCollection)
-            .doc(user.uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 16),
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  child: Text(
-                    userData['name']?[0].toUpperCase() ?? user.email?[0].toUpperCase() ?? 'U',
-                    style: const TextStyle(
-                      fontSize: 32,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  userData['name'] ?? 'User',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  user.email ?? '',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                _buildSection(
-                  context,
-                  'Personal Information',
-                  [
-                    _buildInfoTile(
-                      context,
-                      'Phone',
-                      userData['phone'] ?? 'Not set',
-                      Icons.phone,
-                    ),
-                    _buildInfoTile(
-                      context,
-                      'Address',
-                      userData['address'] ?? 'Not set',
-                      Icons.location_on,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                _buildSection(
-                  context,
-                  'Preferences',
-                  [
-                    _buildSwitchTile(
-                      context,
-                      'Email Notifications',
-                      userData['emailNotifications'] ?? true,
-                      (value) {
-                        // TODO: Implement email notifications toggle
-                      },
-                    ),
-                    _buildSwitchTile(
-                      context,
-                      'Push Notifications',
-                      userData['pushNotifications'] ?? true,
-                      (value) {
-                        // TODO: Implement push notifications toggle
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                _buildSection(
-                  context,
-                  'Account',
-                  [
-                    _buildActionTile(
-                      context,
-                      'Edit Profile',
-                      Icons.edit,
-                      () {
-                        // TODO: Implement edit profile
-                      },
-                    ),
-                    _buildActionTile(
-                      context,
-                      'Change Password',
-                      Icons.lock,
-                      () {
-                        // TODO: Implement change password
-                      },
-                    ),
-                    _buildActionTile(
-                      context,
-                      'Delete Account',
-                      Icons.delete,
-                      () {
-                        // TODO: Implement delete account
-                      },
-                      isDestructive: true,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }

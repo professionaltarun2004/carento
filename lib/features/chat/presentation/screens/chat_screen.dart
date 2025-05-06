@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:carento/firebase_options.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -33,7 +34,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (message.isEmpty) return;
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to use the chat')),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -59,10 +67,24 @@ class _ChatScreenState extends State<ChatScreen> {
         'isUser': false,
         'timestamp': FieldValue.serverTimestamp(),
       });
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        String errorMessage = 'An error occurred';
+        if (e.code == 'permission-denied') {
+          errorMessage = 'You do not have permission to send messages';
+        } else if (e.code == 'unavailable') {
+          errorMessage = 'Service is temporarily unavailable';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage)),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('An unexpected error occurred: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -71,20 +93,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<String> _getGeminiResponse(String message) async {
-    // Dynamically construct the Cloud Function URL using projectId
-    const region = 'us-central1'; // Change if you deployed to a different region
-    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
-    final url = 'https://$region-$projectId.cloudfunctions.net/geminiChat';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'message': message}),
-    );
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['reply'] ?? 'No response from Gemini.';
-    } else {
-      return 'Error: ${response.body}';
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('geminiChat');
+      final result = await callable.call({'message': message});
+      return result.data['reply'] ?? 'No response from Gemini.';
+    } catch (e) {
+      if (e is FirebaseFunctionsException) {
+        switch (e.code) {
+          case 'not-found':
+            return 'Chat service is not available. Please try again later.';
+          case 'permission-denied':
+            return 'You do not have permission to use the chat service.';
+          case 'unavailable':
+            return 'Chat service is temporarily unavailable. Please try again later.';
+          default:
+            return 'An error occurred: ${e.message}';
+        }
+      }
+      return 'An unexpected error occurred. Please try again.';
     }
   }
 
@@ -257,5 +284,27 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildCarImage(String? imageUrl) {
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[200],
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+        errorWidget: (context, url, error) => Image.asset(
+          'assets/images/car1.jpg', // fallback asset
+          fit: BoxFit.cover,
+        ),
+      );
+    } else {
+      return Image.asset(
+        'assets/images/car1.jpg', // fallback asset
+        fit: BoxFit.cover,
+      );
+    }
   }
 }

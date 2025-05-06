@@ -58,6 +58,23 @@ class GeminiChatService {
       _chatHistory.add(assistantMessage);
 
       return assistantMessage;
+    } on FirebaseFunctionsException catch (e) {
+      String errorMessage = 'Failed to send message';
+      switch (e.code) {
+        case 'unauthenticated':
+          errorMessage = 'You must be signed in to use chat';
+          break;
+        case 'invalid-argument':
+          errorMessage = 'Invalid message format';
+          break;
+        case 'resource-exhausted':
+          errorMessage = 'Service is temporarily unavailable. Please try again later';
+          break;
+        case 'internal':
+          errorMessage = 'An internal error occurred. Please try again later';
+          break;
+      }
+      throw Exception(errorMessage);
     } catch (e) {
       throw Exception('Failed to send message: ${e.toString()}');
     }

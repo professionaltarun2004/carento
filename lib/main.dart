@@ -7,15 +7,24 @@ import 'package:carento/features/auth/presentation/screens/splash_screen.dart';
 import 'features/cars/presentation/screens/admin_seed_screen.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   
-  // Configure Functions emulator
-  FirebaseFunctions.instance.useFunctionsEmulator('localhost', 5001);
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // Only use emulator in debug mode
+    if (const bool.fromEnvironment('dart.vm.product') == false) {
+      FirebaseFunctions.instance.useFunctionsEmulator('localhost', 5001);
+    }
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+  }
   
   runApp(
     const ProviderScope(
@@ -31,7 +40,8 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
     final locale = ref.watch(languageProvider);
-    return MaterialApp(
+    
+    return MaterialApp.router(
       title: 'Drivana',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
@@ -44,14 +54,29 @@ class MyApp extends ConsumerWidget {
         Locale('es'),
       ],
       localizationsDelegates: const [
-        // Add localization delegates here
-        // ...
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
       ],
-      home: const SplashScreen(),
-      routes: {
-        '/admin-seed': (context) => const AdminSeedScreen(),
-        '/settings': (context) => const SettingsScreen(),
-      },
+      routerConfig: _router,
     );
   }
 }
+
+final _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const SplashScreen(),
+    ),
+    GoRoute(
+      path: '/admin-seed',
+      builder: (context, state) => const AdminSeedScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
+    ),
+  ],
+);

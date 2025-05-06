@@ -14,6 +14,18 @@ class CarCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    int assetIndex = 1;
+    if (car.id != null && car.id!.isNotEmpty) {
+      assetIndex = (car.id!.hashCode.abs() % 7) + 1;
+    }
+    String assetPath = 'assets/images/car$assetIndex.jpg';
+    
+    final status = car.isAvailable == true ? 'Available' : 'Booked';
+    final statusColor = car.isAvailable == true
+        ? Colors.green
+        : Colors.red;
+    final lastUpdated = 'Just now';
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
@@ -24,20 +36,29 @@ class CarCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: CachedNetworkImage(
-                imageUrl: (car.imageUrls != null && car.imageUrls!.isNotEmpty) ? car.imageUrls!.first : '',
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey[300],
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.error),
-                ),
-              ),
+              child: (car.imageUrls != null && car.imageUrls!.isNotEmpty && car.imageUrls!.first.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: car.imageUrls!.first,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[300],
+                        child: const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Image.asset(
+                        assetPath,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      ),
+                    )
+                  : Image.asset(
+                      assetPath,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -61,6 +82,42 @@ class CarCard extends StatelessWidget {
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.circle,
+                              color: statusColor,
+                              size: 10,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              status,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.access_time, size: 14, color: Colors.grey),
+                      Text(
+                        lastUpdated,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
                       ),
                     ],
                   ),

@@ -25,20 +25,32 @@ class BookingCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: CachedNetworkImage(
-                imageUrl: booking['carImageUrl'] ?? '',
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey[300],
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.error),
-                ),
-              ),
+              child: (booking['carImageUrl'] != null && booking['carImageUrl'].toString().isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: booking['carImageUrl'],
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[300],
+                        child: const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) {
+                        // Calculate fallback asset index based on carId
+                        int assetIndex = 1;
+                        if (booking['carId'] != null && booking['carId'].toString().isNotEmpty) {
+                          assetIndex = (booking['carId'].toString().hashCode.abs() % 7) + 1;
+                        }
+                        return Image.asset(
+                          'assets/images/car$assetIndex.jpg',
+                          fit: BoxFit.cover,
+                        );
+                      },
+                    )
+                  : Image.asset(
+                      'assets/images/car1.jpg',
+                      fit: BoxFit.cover,
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(16),

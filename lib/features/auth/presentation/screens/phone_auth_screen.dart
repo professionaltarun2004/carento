@@ -40,8 +40,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           );
         },
         verificationFailed: (FirebaseAuthException e) {
+          String errorMessage = 'Verification failed';
+          if (e.code == 'invalid-phone-number') {
+            errorMessage = 'Invalid phone number format';
+          } else if (e.code == 'too-many-requests') {
+            errorMessage = 'Too many attempts. Please try again later';
+          } else if (e.code == 'quota-exceeded') {
+            errorMessage = 'SMS quota exceeded. Please try again later';
+          }
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.message ?? 'Verification failed')),
+            SnackBar(content: Text(errorMessage)),
           );
           setState(() => _isLoading = false);
         },
@@ -58,7 +66,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Phone verification failed')),
+        SnackBar(content: Text('Phone verification failed: ${e.toString()}')),
       );
       setState(() => _isLoading = false);
     }
@@ -80,9 +88,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Invalid OTP';
+      if (e.code == 'invalid-verification-code') {
+        errorMessage = 'Invalid verification code';
+      } else if (e.code == 'session-expired') {
+        errorMessage = 'Session expired. Please try again';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage)),
+      );
+      setState(() => _isLoading = false);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid OTP')),
+        SnackBar(content: Text('Verification failed: ${e.toString()}')),
       );
       setState(() => _isLoading = false);
     }

@@ -17,14 +17,24 @@ class ChatService {
           .orderBy('timestamp', descending: true)
           .snapshots()
           .map((snapshot) {
-        return snapshot.docs
-            .map((doc) => ChatMessage.fromFirestore(doc))
-            .where((message) =>
-                (message.senderId == currentUserId && message.receiverId == otherUserId) ||
-                (message.senderId == otherUserId && message.receiverId == currentUserId))
-            .toList();
-      });
+            try {
+              return snapshot.docs
+                  .map((doc) => ChatMessage.fromFirestore(doc))
+                  .where((message) =>
+                      (message.senderId == currentUserId && message.receiverId == otherUserId) ||
+                      (message.senderId == otherUserId && message.receiverId == currentUserId))
+                  .toList();
+            } catch (e) {
+              print('Error processing chat messages: $e');
+              return [];
+            }
+          })
+          .handleError((error) {
+            print('Error in chat stream: $error');
+            return [];
+          });
     } catch (e) {
+      print('Error setting up chat stream: $e');
       return Stream.value([]);
     }
   }
@@ -38,6 +48,9 @@ class ChatService {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) return 'User not authenticated';
+      
+      if (message.trim().isEmpty) return 'Message cannot be empty';
+      
       final chatMessage = ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         senderId: currentUserId,
@@ -46,8 +59,16 @@ class ChatService {
         timestamp: DateTime.now(),
         imageUrl: imageUrl,
       );
+      
       await _firestore.collection('chats').doc(chatMessage.id).set(chatMessage.toMap());
       return null;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return 'You do not have permission to send messages';
+      } else if (e.code == 'unavailable') {
+        return 'Service is temporarily unavailable. Please try again later';
+      }
+      return 'Failed to send message: ${e.message}';
     } catch (e) {
       return 'Failed to send message: ${e.toString()}';
     }
@@ -58,6 +79,7 @@ class ChatService {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) return;
+      
       final batch = _firestore.batch();
       final messages = await _firestore
           .collection('chats')
@@ -65,12 +87,16 @@ class ChatService {
           .where('receiverId', isEqualTo: currentUserId)
           .where('isRead', isEqualTo: false)
           .get();
+          
+      if (messages.docs.isEmpty) return;
+      
       for (var doc in messages.docs) {
         batch.update(doc.reference, {'isRead': true});
       }
+      
       await batch.commit();
     } catch (e) {
-      // Handle error
+      print('Error marking messages as read: $e');
     }
   }
 
@@ -79,14 +105,20 @@ class ChatService {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) return Stream.value(0);
+      
       return _firestore
           .collection('chats')
           .where('senderId', isEqualTo: senderId)
           .where('receiverId', isEqualTo: currentUserId)
           .where('isRead', isEqualTo: false)
           .snapshots()
-          .map((snapshot) => snapshot.docs.length);
+          .map((snapshot) => snapshot.docs.length)
+          .handleError((error) {
+            print('Error in unread message count stream: $error');
+            return 0;
+          });
     } catch (e) {
+      print('Error setting up unread message count stream: $e');
       return Stream.value(0);
     }
   }

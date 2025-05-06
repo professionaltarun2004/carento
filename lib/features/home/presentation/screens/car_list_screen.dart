@@ -7,6 +7,8 @@ import 'package:carento/features/home/presentation/widgets/filter_sheet.dart';
 import 'package:carento/core/constants/app_constants.dart';
 import 'package:carento/features/cars/domain/models/car_model.dart';
 import 'package:carento/features/cars/presentation/screens/car_details_screen.dart';
+import 'package:carento/features/cars/data/services/car_recommendation_service.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -22,6 +24,98 @@ class _CarListScreenState extends State<CarListScreen> {
   final MapController _mapController = MapController();
   final List<Marker> _markers = [];
   Map<String, dynamic> _filters = {};
+  final CarRecommendationService _recommendationService = CarRecommendationService();
+  List<CarModel> _recommendedCars = [];
+  bool _isLoadingRecommendations = true;
+  GeoPoint? _userLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _getUserLocation();
+    _loadRecommendations();
+  }
+
+  Future<void> _getUserLocation() async {
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location services are disabled. Please enable them to get better recommendations.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Location permissions are denied. Recommendations will not be location-based.'),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permissions are permanently denied. Please enable them in app settings.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      
+      setState(() {
+        _userLocation = GeoPoint(position.latitude, position.longitude);
+      });
+      _loadRecommendations();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error getting location: $e'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadRecommendations() async {
+    setState(() => _isLoadingRecommendations = true);
+    try {
+      final recommendations = await _recommendationService.getRecommendedCars(
+        userLocation: _userLocation,
+      );
+      setState(() {
+        _recommendedCars = recommendations;
+        _isLoadingRecommendations = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingRecommendations = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +152,10 @@ class _CarListScreenState extends State<CarListScreen> {
 
   Widget _buildListView() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _getFilteredCarsStream(),
+      stream: FirebaseFirestore.instance
+          .collection(AppConstants.carsCollection)
+          .where('isAvailable', isEqualTo: true)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
@@ -69,25 +166,76 @@ class _CarListScreenState extends State<CarListScreen> {
         }
 
         final cars = snapshot.data?.docs ?? [];
+        _updateMarkers(cars);
 
-        if (cars.isEmpty) {
-          return const Center(
-            child: Text('No cars available matching your criteria'),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: cars.length,
-          itemBuilder: (context, index) {
-            final carModel = CarModel.fromFirestore(cars[index]);
-            return CarCard(
-              car: carModel,
-              onTap: () => _showCarDetails(context, carModel),
-            );
-          },
+        return RefreshIndicator(
+          onRefresh: _loadRecommendations,
+          child: ListView(
+            children: [
+              if (_recommendedCars.isNotEmpty)
+                _buildSection(
+                  context,
+                  'Recommended for You',
+                  _recommendedCars,
+                  isLoading: _isLoadingRecommendations,
+                ),
+              _buildSection(
+                context,
+                'All Available Cars',
+                cars.map((doc) => CarModel.fromFirestore(doc)).toList(),
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildSection(
+    BuildContext context,
+    String title,
+    List<dynamic> items, {
+    bool isLoading = false,
+  }) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final car = items[index] is CarModel
+                ? items[index] as CarModel
+                : CarModel.fromFirestore(items[index] as DocumentSnapshot);
+            return CarCard(
+              car: car,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CarDetailsScreen(car: car),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -155,9 +303,48 @@ class _CarListScreenState extends State<CarListScreen> {
           Marker(
             point: LatLng(carModel.location!.latitude, carModel.location!.longitude),
             width: 60,
-            height: 60,
+            height: 80,
             child: GestureDetector(
-              onTap: () => _showCarDetails(context, carModel),
+              onTap: () {
+                _mapController.move(
+                  LatLng(carModel.location!.latitude, carModel.location!.longitude),
+                  16.0,
+                );
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Row(
+                      children: [
+                        Icon(Icons.directions_car, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Text(carModel.name ?? 'Car'),
+                      ],
+                    ),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Status: ${carModel.isAvailable == true ? 'Available' : 'Booked'}'),
+                        Text('Price: ₹${carModel.price?.toStringAsFixed(0) ?? 'N/A'}'),
+                        if (carModel.isAvailable == false)
+                          Row(
+                            children: [
+                              Icon(Icons.location_searching, color: Colors.green),
+                              const SizedBox(width: 4),
+                              Text('Tracking enabled'),
+                            ],
+                          ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              },
               child: Column(
                 children: [
                   Container(
@@ -172,7 +359,14 @@ class _CarListScreenState extends State<CarListScreen> {
                         ),
                       ],
                     ),
-                    child: Icon(Icons.directions_car, color: Colors.blue, size: 32),
+                    child: Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        Icon(Icons.directions_car, color: Colors.blue, size: 32),
+                        if (carModel.isAvailable == false)
+                          Icon(Icons.location_on, color: Colors.red, size: 18),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -183,6 +377,11 @@ class _CarListScreenState extends State<CarListScreen> {
                       fontSize: 12,
                     ),
                   ),
+                  if (carModel.isAvailable == false)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(Icons.track_changes, color: Colors.green, size: 18),
+                    ),
                 ],
               ),
             ),
