@@ -58,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Authentication failed: ${e.toString()}')),
+        SnackBar(content: Text('Authentication failed: \\${e.toString()}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -100,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google sign in failed: ${e.toString()}')),
+        SnackBar(content: Text('Google sign in failed: \\${e.toString()}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

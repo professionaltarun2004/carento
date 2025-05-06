@@ -33,11 +33,19 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: _phoneController.text,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          await FirebaseAuth.instance.signInWithCredential(credential);
-          if (!mounted) return;
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-          );
+          try {
+            await FirebaseAuth.instance.signInWithCredential(credential);
+            if (!mounted) return;
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Auto sign-in failed: \\${e.toString()}')),
+              );
+            }
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
           String errorMessage = 'Verification failed';
@@ -66,7 +74,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Phone verification failed: ${e.toString()}')),
+        SnackBar(content: Text('Phone verification failed: \\${e.toString()}')),
       );
       setState(() => _isLoading = false);
     }
@@ -101,7 +109,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       setState(() => _isLoading = false);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Verification failed: ${e.toString()}')),
+        SnackBar(content: Text('Verification failed: \\${e.toString()}')),
       );
       setState(() => _isLoading = false);
     }

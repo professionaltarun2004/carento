@@ -158,7 +158,7 @@ class _CarListScreenState extends State<CarListScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error: \\${snapshot.error}'));
+          return Center(child: Text('Error loading cars: \\${snapshot.error}'));
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {

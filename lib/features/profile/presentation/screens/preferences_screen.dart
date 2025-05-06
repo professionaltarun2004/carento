@@ -116,6 +116,8 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  if (_preferences.isEmpty)
+                    const Center(child: Text('No preferences found.')),
                   _buildPreferenceSection(
                     'Fuel Type',
                     DropdownButtonFormField<String>(

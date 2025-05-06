@@ -256,68 +256,43 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
   Future<void> _saveBooking(String? paymentId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not authenticated')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User not authenticated')),
+        );
+      }
       return;
     }
-    
     if (_pickupDate == null || _dropoffDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid booking dates')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid booking dates')),
+        );
+      }
       return;
     }
-    
-    final booking = {
-      'userId': user.uid,
-      'carId': widget.car.id,
-      'carName': widget.car.name,
-      'carImageUrl': (widget.car.imageUrls != null && widget.car.imageUrls!.isNotEmpty) ? widget.car.imageUrls!.first : '',
-      'pickupDate': _pickupDate,
-      'dropoffDate': _dropoffDate,
-      'pickupLocation': _pickupLocationText,
-      'dropoffLocation': _dropoffLocationText,
-      'totalAmount': ((widget.car.price ?? 0) * (_dropoffDate!.difference(_pickupDate!).inDays + 1)),
-      'status': 'confirmed',
-      'paymentStatus': 'paid',
-      'paymentId': paymentId,
-      'createdAt': DateTime.now(),
-    };
-    
     try {
+      final booking = {
+        'userId': user.uid,
+        'carId': widget.car.id,
+        'carName': widget.car.name ?? '',
+        'carImageUrl': (widget.car.imageUrls != null && widget.car.imageUrls!.isNotEmpty) ? widget.car.imageUrls!.first : '',
+        'pickupDate': _pickupDate,
+        'dropoffDate': _dropoffDate,
+        'pickupLocation': _pickupLocationText,
+        'dropoffLocation': _dropoffLocationText,
+        'totalAmount': ((widget.car.price ?? 0) * (_dropoffDate!.difference(_pickupDate!).inDays + 1)),
+        'status': 'confirmed',
+        'paymentStatus': 'paid',
+        'paymentId': paymentId,
+        'createdAt': DateTime.now(),
+      };
       await FirebaseFirestore.instance.collection('bookings').add(booking);
       if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Booking Confirmed!'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Car: ${widget.car.name}'),
-                Text('Pickup: ${_pickupDate!.toLocal().toString().split(' ')[0]}'),
-                Text('Drop-off: ${_dropoffDate!.toLocal().toString().split(' ')[0]}'),
-                Text('Total: ₹${((widget.car.price ?? 0) * (_dropoffDate!.difference(_pickupDate!).inDays + 1)).toStringAsFixed(0)}'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context); // Go back to car list
-                  Navigator.pushNamed(context, '/bookings');
-                },
-                child: const Text('Go to My Bookings'),
-              ),
-            ],
-          ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Booking successful!')),
         );
+        Navigator.pop(context);
       }
     } on FirebaseException catch (e) {
       String errorMessage = 'Could not save your booking';

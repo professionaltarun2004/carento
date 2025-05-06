@@ -52,7 +52,7 @@ class BookingHistoryScreen extends StatelessWidget {
                 ),
               );
             }
-            return Center(child: Text('Error: $errorMsg'));
+            return Center(child: Text('Error loading bookings: $errorMsg'));
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -62,30 +62,7 @@ class BookingHistoryScreen extends StatelessWidget {
           final bookings = snapshot.data?.docs ?? [];
 
           if (bookings.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.history,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No bookings yet',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your booking history will appear here',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            );
+            return const Center(child: Text('No bookings found.'));
           }
 
           return ListView.builder(

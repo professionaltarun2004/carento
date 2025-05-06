@@ -25,13 +25,13 @@ class GeminiChatService {
     if (message.trim().isEmpty) {
       return 'Please enter a message';
     }
-    
     try {
       final response = await _chat.sendMessage(
         Content.text(message),
       );
       return response.text ?? 'Sorry, I could not process your request.';
     } on Exception catch (e) {
+      print('GeminiChatService error: $e');
       if (e.toString().contains('API key')) {
         return 'Error: Invalid API key configuration. Please check your configuration.';
       } else if (e.toString().contains('network')) {
@@ -44,6 +44,9 @@ class GeminiChatService {
         return 'Error: Request timed out. Please try again.';
       }
       return 'Error: ${e.toString()}';
+    } catch (e) {
+      print('GeminiChatService unknown error: $e');
+      return 'An unexpected error occurred. Please try again.';
     }
   }
 

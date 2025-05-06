@@ -22,6 +22,12 @@ class ProfileScreen extends StatelessWidget {
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection(AppConstants.usersCollection).doc(user.uid).get(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error loading profile: \\${snapshot.error}'));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
           return ListView(
             padding: const EdgeInsets.all(16),
