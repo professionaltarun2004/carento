@@ -21,12 +21,15 @@ class ChatService {
               return snapshot.docs
                   .map((doc) => ChatMessage.fromFirestore(doc))
                   .where((message) =>
-                      (message.senderId == currentUserId && message.receiverId == otherUserId) ||
-                      (message.senderId == otherUserId && message.receiverId == currentUserId))
-                  .toList();
+                      (message.senderId == currentUserId &&
+                          message.receiverId == otherUserId) ||
+                      (message.senderId == otherUserId &&
+                          message.receiverId == currentUserId))
+                  .toList()
+                  .cast<ChatMessage>();
             } catch (e) {
               print('Error processing chat messages: $e');
-              return [];
+              return <ChatMessage>[];
             }
           })
           .handleError((error) {
@@ -48,9 +51,9 @@ class ChatService {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) return 'User not authenticated';
-      
+
       if (message.trim().isEmpty) return 'Message cannot be empty';
-      
+
       final chatMessage = ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         senderId: currentUserId,
@@ -59,8 +62,11 @@ class ChatService {
         timestamp: DateTime.now(),
         imageUrl: imageUrl,
       );
-      
-      await _firestore.collection('chats').doc(chatMessage.id).set(chatMessage.toMap());
+
+      await _firestore
+          .collection('chats')
+          .doc(chatMessage.id)
+          .set(chatMessage.toMap());
       return null;
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') {
@@ -79,7 +85,7 @@ class ChatService {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) return;
-      
+
       final batch = _firestore.batch();
       final messages = await _firestore
           .collection('chats')
@@ -87,13 +93,13 @@ class ChatService {
           .where('receiverId', isEqualTo: currentUserId)
           .where('isRead', isEqualTo: false)
           .get();
-          
+
       if (messages.docs.isEmpty) return;
-      
+
       for (var doc in messages.docs) {
         batch.update(doc.reference, {'isRead': true});
       }
-      
+
       await batch.commit();
     } catch (e) {
       print('Error marking messages as read: $e');
@@ -105,7 +111,7 @@ class ChatService {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) return Stream.value(0);
-      
+
       return _firestore
           .collection('chats')
           .where('senderId', isEqualTo: senderId)
@@ -114,12 +120,12 @@ class ChatService {
           .snapshots()
           .map((snapshot) => snapshot.docs.length)
           .handleError((error) {
-            print('Error in unread message count stream: $error');
-            return 0;
-          });
+        print('Error in unread message count stream: $error');
+        return 0;
+      });
     } catch (e) {
       print('Error setting up unread message count stream: $e');
       return Stream.value(0);
     }
   }
-} 
+}
