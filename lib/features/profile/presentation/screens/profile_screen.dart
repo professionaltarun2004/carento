@@ -19,63 +19,155 @@ class ProfileScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Profile'),
       ),
-      body: ListView(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('Personal Information'),
-            onTap: () {
-              // TODO: Navigate to personal information screen
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text('Car Preferences'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const PreferencesScreen(),
+      body: FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection(AppConstants.usersCollection).doc(user.uid).get(),
+        builder: (context, snapshot) {
+          final userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Center(
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 48,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      child: Text(
+                        (userData['name'] ?? user.email ?? 'U')[0].toUpperCase(),
+                        style: const TextStyle(fontSize: 36, color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      userData['name'] ?? 'User',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      user.email ?? '',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.payment),
-            title: const Text('Payment Methods'),
-            onTap: () {
-              // TODO: Navigate to payment methods screen
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.notifications),
-            title: const Text('Notifications'),
-            onTap: () {
-              // TODO: Navigate to notifications screen
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.help),
-            title: const Text('Help & Support'),
-            onTap: () {
-              // TODO: Navigate to help & support screen
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sign Out'),
-            onTap: () async {
-              try {
-                await FirebaseAuth.instance.signOut();
-                Navigator.pushReplacementNamed(context, '/login');
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error signing out: $e')),
-                );
-              }
-            },
-          ),
-        ],
+              ),
+              const SizedBox(height: 24),
+              FutureBuilder<QuerySnapshot>(
+                future: FirebaseFirestore.instance
+                    .collection('bookings')
+                    .where('userId', isEqualTo: user.uid)
+                    .get(),
+                builder: (context, bookingSnapshot) {
+                  final bookings = bookingSnapshot.data?.docs ?? [];
+                  final totalBookings = bookings.length;
+                  final favoriteType = bookings.isNotEmpty
+                      ? (() {
+                          final types = bookings
+                              .map((doc) => (doc.data() as Map<String, dynamic>?)?['carType'])
+                              .where((type) => type != null && type != '')
+                              .toList();
+                          if (types.isEmpty) return 'N/A';
+                          final freq = <String, int>{};
+                          for (final type in types) {
+                            freq[type] = (freq[type] ?? 0) + 1;
+                          }
+                          return freq.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+                        })()
+                      : 'N/A';
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildStatCard('Bookings', totalBookings.toString(), context),
+                      _buildStatCard('Fav. Type', favoriteType, context),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.edit),
+                      title: const Text('Edit Profile'),
+                      onTap: () {
+                        // TODO: Implement edit profile
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.settings),
+                      title: const Text('Car Preferences'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PreferencesScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.payment),
+                      title: const Text('Payment Methods'),
+                      onTap: () {
+                        // TODO: Implement payment methods
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.history),
+                      title: const Text('My Activity'),
+                      onTap: () {
+                        // TODO: Implement activity screen
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.logout),
+                      title: const Text('Sign Out'),
+                      onTap: () async {
+                        try {
+                          await FirebaseAuth.instance.signOut();
+                          Navigator.pushReplacementNamed(context, '/login');
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error signing out: $e')),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
       ),
     );
   }

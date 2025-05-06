@@ -26,15 +26,35 @@ class CarRecommendationService {
     final userDoc = await _firestore.collection('users').doc(user.uid).get();
     final userPreferences = userDoc.data()?['preferences'] as Map<String, dynamic>? ?? {};
 
-    // Extract car IDs from bookings
-    final bookedCarIds = bookings.docs
-        .map((doc) => doc.data()['carId'] as String)
-        .toSet();
+    // Extract car IDs and favorite city/type from bookings
+    final bookedCarIds = bookings.docs.map((doc) => doc.data()['carId'] as String).toSet();
+    final favoriteCity = bookings.docs.isNotEmpty
+        ? (bookings.docs
+            .map((doc) => doc.data()['city'] ?? '')
+            .fold<Map<String, int>>({}, (map, city) {
+              map[city] = (map[city] ?? 0) + 1;
+              return map;
+            })
+            .entries
+            .reduce((a, b) => a.value > b.value ? a : b)
+            .key)
+        : null;
+    final favoriteType = bookings.docs.isNotEmpty
+        ? (bookings.docs
+            .map((doc) => doc.data()['carType'] ?? '')
+            .fold<Map<String, int>>({}, (map, type) {
+              map[type] = (map[type] ?? 0) + 1;
+              return map;
+            })
+            .entries
+            .reduce((a, b) => a.value > b.value ? a : b)
+            .key)
+        : null;
 
     // Get all available cars
     final carsSnapshot = await _firestore
         .collection('cars')
-        .where('isAvailable', isEqualTo: true)
+        .where('available', isEqualTo: true)
         .get();
 
     final cars = carsSnapshot.docs
@@ -42,27 +62,57 @@ class CarRecommendationService {
         .where((car) => !bookedCarIds.contains(car.id))
         .toList();
 
+    // If user has no history, show top-rated or trending cars
+    if (bookings.docs.isEmpty) {
+      cars.sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+      return cars.take(limit).toList();
+    }
+
     // Calculate scores for each car
     final scoredCars = cars.map((car) {
       double score = 0.0;
       final weights = {
-        'price': 0.3,
-        'location': 0.2,
-        'features': 0.2,
-        'ratings': 0.15,
-        'recency': 0.15,
+        'preference': 0.25,
+        'city': 0.2,
+        'type': 0.2,
+        'rating': 0.15,
+        'recency': 0.1,
+        'location': 0.1,
       };
 
-      // Price range scoring (prefer cars in similar price range to previously booked cars)
-      if (bookings.docs.isNotEmpty) {
-        final avgBookedPrice = bookings.docs
-            .map((doc) => doc.data()['totalAmount'] as double)
-            .reduce((a, b) => a + b) /
-            bookings.docs.length;
-        
-        final priceDiff = (car.price ?? 0) - avgBookedPrice;
-        final priceScore = 1.0 - (priceDiff.abs() / (avgBookedPrice * 2)).clamp(0.0, 1.0);
-        score += priceScore * weights['price']!;
+      // User preferences matching
+      if (userPreferences.isNotEmpty && car.specifications != null) {
+        double preferenceScore = 0.0;
+        for (final key in userPreferences.keys) {
+          if (car.specifications!.containsKey(key) &&
+              car.specifications![key] == userPreferences[key]) {
+            preferenceScore += 1.0;
+          }
+        }
+        preferenceScore = (preferenceScore / userPreferences.length).clamp(0.0, 1.0);
+        score += preferenceScore * weights['preference']!;
+      }
+
+      // City matching
+      if (favoriteCity != null && car.city != null && car.city == favoriteCity) {
+        score += 1.0 * weights['city']!;
+      }
+
+      // Car type matching
+      if (favoriteType != null && car.carType != null && car.carType == favoriteType) {
+        score += 1.0 * weights['type']!;
+      }
+
+      // Rating scoring
+      final ratingScore = (car.rating ?? 0) / 5.0;
+      score += ratingScore * weights['rating']!;
+
+      // Recency scoring (prefer newer cars)
+      if (car.year != null) {
+        final currentYear = DateTime.now().year;
+        final carYear = int.tryParse(car.year!) ?? currentYear;
+        final recencyScore = 1.0 - ((currentYear - carYear) / 10).clamp(0.0, 1.0);
+        score += recencyScore * weights['recency']!;
       }
 
       // Location scoring (prefer cars closer to user's location)
@@ -76,62 +126,9 @@ class CarRecommendationService {
         score += locationScore * weights['location']!;
       }
 
-      // Feature matching (prefer cars with similar features to previously booked cars)
-      if (bookings.docs.isNotEmpty) {
-        final bookedSpecs = bookings.docs
-            .map((doc) => doc.data()['specifications'] as Map<String, dynamic>)
-            .toList();
-
-        double featureScore = 0.0;
-        for (final spec in bookedSpecs) {
-          if (car.specifications != null) {
-            for (final key in spec.keys) {
-              if (car.specifications!.containsKey(key) &&
-                  car.specifications![key] == spec[key]) {
-                featureScore += 0.5;
-              }
-            }
-          }
-        }
-        featureScore = (featureScore / bookedSpecs.length).clamp(0.0, 1.0);
-        score += featureScore * weights['features']!;
-      }
-
-      // User preferences matching
-      if (userPreferences.isNotEmpty && car.specifications != null) {
-        double preferenceScore = 0.0;
-        for (final key in userPreferences.keys) {
-          if (car.specifications!.containsKey(key) &&
-              car.specifications![key] == userPreferences[key]) {
-            preferenceScore += 0.5;
-          }
-        }
-        preferenceScore = (preferenceScore / userPreferences.length).clamp(0.0, 1.0);
-        score += preferenceScore * 0.1; // Additional weight for user preferences
-      }
-
-      // Rating scoring
-      final ratingScore = (car.rating ?? 0) / 5.0;
-      score += ratingScore * weights['ratings']!;
-
-      // Recency scoring (prefer newer cars)
-      if (car.year != null) {
-        final currentYear = DateTime.now().year;
-        final carYear = int.tryParse(car.year!) ?? currentYear;
-        final recencyScore = 1.0 - ((currentYear - carYear) / 10).clamp(0.0, 1.0);
-        score += recencyScore * weights['recency']!;
-      }
-
       return {
         'car': car,
         'score': score,
-        'details': {
-          'priceScore': score * weights['price']!,
-          'locationScore': score * weights['location']!,
-          'featureScore': score * weights['features']!,
-          'ratingScore': score * weights['ratings']!,
-          'recencyScore': score * weights['recency']!,
-        },
       };
     }).toList();
 

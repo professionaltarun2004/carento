@@ -79,14 +79,18 @@ class _FilterSheetState extends State<FilterSheet> {
                     child: OutlinedButton(
                       onPressed: () {
                         setState(() => _filters.clear());
+                        print('Filters cleared');
+                        widget.onApply(_filters);
+                        Navigator.pop(context);
                       },
-                      child: const Text('Reset'),
+                      child: const Text('Clear Filters'),
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
+                        print('Filters applied: \\${_filters.toString()}');
                         widget.onApply(_filters);
                         Navigator.pop(context);
                       },

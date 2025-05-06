@@ -154,11 +154,11 @@ class _CarListScreenState extends State<CarListScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection(AppConstants.carsCollection)
-          .where('isAvailable', isEqualTo: true)
+          .where('available', isEqualTo: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(child: Text('Error: \\${snapshot.error}'));
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -166,7 +166,12 @@ class _CarListScreenState extends State<CarListScreen> {
         }
 
         final cars = snapshot.data?.docs ?? [];
+        print('Loaded cars: \\${cars.length}');
         _updateMarkers(cars);
+
+        if (cars.isEmpty && _recommendedCars.isEmpty) {
+          return Center(child: Text('No cars available.'));
+        }
 
         return RefreshIndicator(
           onRefresh: _loadRecommendations,

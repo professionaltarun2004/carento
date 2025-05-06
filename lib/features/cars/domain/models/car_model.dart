@@ -16,6 +16,8 @@ class CarModel {
   final String? description;
   final double? rating;
   final int? totalRatings;
+  final String? city;
+  final String? carType;
 
   CarModel({
     this.id,
@@ -32,6 +34,8 @@ class CarModel {
     this.description,
     this.rating = 0.0,
     this.totalRatings = 0,
+    this.city,
+    this.carType,
   });
 
   factory CarModel.fromFirestore(DocumentSnapshot doc) {
@@ -46,11 +50,13 @@ class CarModel {
       imageUrls: (data['imageUrls'] as List?)?.map((e) => e.toString()).toList() ?? [],
       location: data['location'] is GeoPoint ? data['location'] : null,
       ownerId: data['ownerId'] ?? '',
-      isAvailable: data['isAvailable'] ?? true,
+      isAvailable: data['isAvailable'] ?? data['available'] ?? true,
       specifications: data['specifications'] ?? {},
       description: data['description'] ?? '',
       rating: (data['rating'] is num) ? (data['rating'] as num).toDouble() : 0.0,
       totalRatings: data['totalRatings'] ?? 0,
+      city: data['city'] as String?,
+      carType: data['carType'] as String?,
     );
   }
 
@@ -69,6 +75,8 @@ class CarModel {
       'description': description,
       'rating': rating,
       'totalRatings': totalRatings,
+      'city': city,
+      'carType': carType,
     };
   }
 

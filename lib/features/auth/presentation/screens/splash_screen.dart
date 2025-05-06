@@ -3,6 +3,7 @@ import 'package:lottie/lottie.dart';
 import 'package:carento/features/auth/presentation/screens/login_screen.dart';
 import 'package:carento/features/home/presentation/screens/home_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,7 +25,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _checkAuthState();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkAuthState();
+        });
       }
     });
 
@@ -34,14 +37,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<void> _checkAuthState() async {
     final user = FirebaseAuth.instance.currentUser;
     if (!mounted) return;
-    
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => user != null 
-          ? const HomeScreen() 
-          : const LoginScreen(),
-      ),
-    );
+    if (user != null) {
+      context.go('/home');
+    } else {
+      context.go('/login');
+    }
   }
 
   @override
