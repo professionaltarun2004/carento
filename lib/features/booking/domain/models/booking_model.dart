@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:carento/core/constants/app_constants.dart';
 
 class BookingModel {
   final String id;
@@ -13,6 +14,9 @@ class BookingModel {
   final String? paymentId;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final DateTime? cancelledAt;
+  final double? cancellationFee;
+  final String? cancellationReason;
 
   BookingModel({
     required this.id,
@@ -27,6 +31,9 @@ class BookingModel {
     this.paymentId,
     required this.createdAt,
     this.updatedAt,
+    this.cancelledAt,
+    this.cancellationFee,
+    this.cancellationReason,
   });
 
   factory BookingModel.fromFirestore(DocumentSnapshot doc) {
@@ -46,6 +53,11 @@ class BookingModel {
       updatedAt: data['updatedAt'] != null 
           ? (data['updatedAt'] as Timestamp).toDate()
           : null,
+      cancelledAt: data['cancelledAt'] != null 
+          ? (data['cancelledAt'] as Timestamp).toDate()
+          : null,
+      cancellationFee: data['cancellationFee']?.toDouble(),
+      cancellationReason: data['cancellationReason'],
     );
   }
 
@@ -62,11 +74,36 @@ class BookingModel {
       'paymentId': paymentId,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
+      'cancellationFee': cancellationFee,
+      'cancellationReason': cancellationReason,
     };
   }
 
   static double calculateTotalAmount(double dailyRate, DateTime pickup, DateTime dropoff) {
     final days = dropoff.difference(pickup).inDays;
     return dailyRate * days;
+  }
+
+  bool canBeCancelled() {
+    if (status == AppConstants.bookingCancelled || 
+        status == AppConstants.bookingCompleted) {
+      return false;
+    }
+    
+    final now = DateTime.now();
+    final hoursUntilPickup = pickupDate.difference(now).inHours;
+    return hoursUntilPickup >= AppConstants.cancellationWindowHours;
+  }
+
+  double calculateCancellationFee() {
+    final now = DateTime.now();
+    final hoursUntilPickup = pickupDate.difference(now).inHours;
+    
+    if (hoursUntilPickup >= AppConstants.cancellationWindowHours) {
+      return totalAmount * AppConstants.cancellationFeePercentage;
+    } else {
+      return totalAmount * AppConstants.lateCancellationFeePercentage;
+    }
   }
 } 

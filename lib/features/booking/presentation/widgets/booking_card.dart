@@ -15,6 +15,13 @@ class BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final List<String> imageUrls = (booking['carImageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
+    int assetIndex = 1;
+    if (booking['carId'] != null && booking['carId'].toString().isNotEmpty) {
+      assetIndex = (booking['carId'].toString().hashCode.abs() % 7) + 1;
+    }
+    String assetPath = 'assets/images/car$assetIndex.jpg';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
@@ -25,30 +32,26 @@ class BookingCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: (booking['carImageUrl'] != null && booking['carImageUrl'].toString().isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: booking['carImageUrl'],
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: Colors.grey[300],
-                        child: const Center(
-                          child: CircularProgressIndicator(),
+              child: imageUrls.isNotEmpty
+                  ? PageView.builder(
+                      itemCount: imageUrls.length,
+                      itemBuilder: (context, index) => CachedNetworkImage(
+                        imageUrl: imageUrls[index],
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Image.asset(
+                          assetPath,
+                          fit: BoxFit.cover,
                         ),
                       ),
-                      errorWidget: (context, url, error) {
-                        // Calculate fallback asset index based on carId
-                        int assetIndex = 1;
-                        if (booking['carId'] != null && booking['carId'].toString().isNotEmpty) {
-                          assetIndex = (booking['carId'].toString().hashCode.abs() % 7) + 1;
-                        }
-                        return Image.asset(
-                          'assets/images/car$assetIndex.jpg',
-                          fit: BoxFit.cover,
-                        );
-                      },
                     )
                   : Image.asset(
-                      'assets/images/car1.jpg',
+                      assetPath,
                       fit: BoxFit.cover,
                     ),
             ),
@@ -61,11 +64,23 @@ class BookingCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          booking['carName'] ?? 'Car Name',
-                          style: Theme.of(context).textTheme.titleLarge,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              booking['carName'] ?? 'Car Name',
+                              style: Theme.of(context).textTheme.titleLarge,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (booking['carBrand'] != null && booking['carBrand'].toString().isNotEmpty)
+                              Text(
+                                booking['carBrand'],
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       _buildStatusChip(context),
@@ -89,20 +104,55 @@ class BookingCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  if (booking['carSpecifications'] != null) ...[
+                    Row(
+                      children: [
+                        _buildSpecChip(
+                          context,
+                          Icons.local_gas_station,
+                          booking['carSpecifications']['fuelType'] ?? 'N/A',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildSpecChip(
+                          context,
+                          Icons.settings,
+                          booking['carSpecifications']['transmission'] ?? 'N/A',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildSpecChip(
+                          context,
+                          Icons.event_seat,
+                          '${booking['carSpecifications']['seats'] ?? 0} seats',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Booking ID: ${booking['id']?.substring(0, 8) ?? 'N/A'}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey,
-                        ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            booking['pickupLocation'] ?? 'Location not available',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                       Text(
-                        '₹${booking['totalAmount']}',
+                        '₹${booking['totalAmount']?.toStringAsFixed(0) ?? 'N/A'}',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -117,32 +167,29 @@ class BookingCard extends StatelessWidget {
   }
 
   Widget _buildStatusChip(BuildContext context) {
+    final status = booking['status'] ?? 'pending';
     Color color;
-    switch (booking['status']) {
-      case AppConstants.bookingPending:
-        color = Colors.orange;
-        break;
-      case AppConstants.bookingConfirmed:
+    switch (status.toLowerCase()) {
+      case 'confirmed':
         color = Colors.green;
         break;
-      case AppConstants.bookingCompleted:
-        color = Colors.blue;
-        break;
-      case AppConstants.bookingCancelled:
+      case 'cancelled':
         color = Colors.red;
         break;
+      case 'completed':
+        color = Colors.blue;
+        break;
       default:
-        color = Colors.grey;
+        color = Colors.orange;
     }
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        (booking['status'] as String).toUpperCase(),
+        status.toUpperCase(),
         style: TextStyle(
           color: color,
           fontSize: 12,
@@ -152,9 +199,34 @@ class BookingCard extends StatelessWidget {
     );
   }
 
-  String _formatDate(dynamic timestamp) {
-    if (timestamp == null) return 'N/A';
-    final date = (timestamp as Timestamp).toDate();
-    return '${date.day}/${date.month}/${date.year}';
+  Widget _buildSpecChip(BuildContext context, IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    if (date is Timestamp) {
+      return date.toDate().toString().split(' ')[0];
+    }
+    return date.toString().split(' ')[0];
   }
 } 

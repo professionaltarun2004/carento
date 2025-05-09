@@ -6,6 +6,8 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../domain/models/car_model.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class CarDetailsScreen extends StatefulWidget {
   final CarModel car;
@@ -20,8 +22,11 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
   DateTime? _dropoffDate;
   String? _pickupLocationText;
   String? _dropoffLocationText;
+  LatLng? _pickupLocation;
+  LatLng? _dropoffLocation;
   bool _isBooking = false;
   Razorpay? _razorpay;
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
@@ -276,11 +281,16 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
         'userId': user.uid,
         'carId': widget.car.id,
         'carName': widget.car.name ?? '',
-        'carImageUrl': (widget.car.imageUrls != null && widget.car.imageUrls!.isNotEmpty) ? widget.car.imageUrls!.first : '',
+        'carImageUrls': widget.car.imageUrls ?? [],
+        'carBrand': widget.car.brand ?? '',
+        'carType': widget.car.type ?? '',
+        'carSpecifications': widget.car.specifications ?? {},
         'pickupDate': _pickupDate,
         'dropoffDate': _dropoffDate,
         'pickupLocation': _pickupLocationText,
         'dropoffLocation': _dropoffLocationText,
+        'pickupCoordinates': _pickupLocation != null ? GeoPoint(_pickupLocation!.latitude, _pickupLocation!.longitude) : null,
+        'dropoffCoordinates': _dropoffLocation != null ? GeoPoint(_dropoffLocation!.latitude, _dropoffLocation!.longitude) : null,
         'totalAmount': ((widget.car.price ?? 0) * (_dropoffDate!.difference(_pickupDate!).inDays + 1)),
         'status': 'confirmed',
         'paymentStatus': 'paid',
@@ -330,6 +340,110 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
               ),
             ],
           ),
+        );
+      }
+    }
+  }
+
+  Future<LatLng?> _getCurrentLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permission denied');
+        }
+      }
+      
+      Position position = await Geolocator.getCurrentPosition();
+      return LatLng(position.latitude, position.longitude);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error getting location: $e')),
+      );
+      return null;
+    }
+  }
+
+  Future<void> _selectLocation(BuildContext context, bool isPickup) async {
+    final currentLocation = await _getCurrentLocation();
+    if (currentLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not get current location')),
+      );
+      return;
+    }
+
+    final result = await showDialog<LatLng>(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          width: MediaQuery.of(context).size.width * 0.9,
+          child: Column(
+            children: [
+              Expanded(
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: currentLocation,
+                    initialZoom: 15,
+                    onTap: (_, point) {
+                      Navigator.pop(context, point);
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.carento',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: currentLocation,
+                          width: 40,
+                          height: 40,
+                          child: Icon(Icons.location_on, color: Colors.red, size: 40),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text('Tap on the map to select location'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result != null) {
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          result.latitude,
+          result.longitude,
+        );
+        
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks[0];
+          String address = '${place.street}, ${place.locality}, ${place.administrativeArea}';
+          
+          setState(() {
+            if (isPickup) {
+              _pickupLocation = result;
+              _pickupLocationText = address;
+            } else {
+              _dropoffLocation = result;
+              _dropoffLocationText = address;
+            }
+          });
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error getting address: $e')),
         );
       }
     }
@@ -412,22 +526,32 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        TextField(
-                          decoration: const InputDecoration(
-                            labelText: 'Pickup Location',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.location_on),
+                        InkWell(
+                          onTap: () => _selectLocation(context, true),
+                          child: TextField(
+                            enabled: false,
+                            decoration: InputDecoration(
+                              labelText: 'Pickup Location',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.location_on),
+                              suffixIcon: Icon(Icons.map),
+                            ),
+                            controller: TextEditingController(text: _pickupLocationText),
                           ),
-                          onChanged: (val) => setState(() => _pickupLocationText = val),
                         ),
                         const SizedBox(height: 12),
-                        TextField(
-                          decoration: const InputDecoration(
-                            labelText: 'Drop-off Location',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.location_on),
+                        InkWell(
+                          onTap: () => _selectLocation(context, false),
+                          child: TextField(
+                            enabled: false,
+                            decoration: InputDecoration(
+                              labelText: 'Drop-off Location',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.location_on),
+                              suffixIcon: Icon(Icons.map),
+                            ),
+                            controller: TextEditingController(text: _dropoffLocationText),
                           ),
-                          onChanged: (val) => setState(() => _dropoffLocationText = val),
                         ),
                         if (_pickupDate != null && _dropoffDate != null && _pickupLocationText != null && _pickupLocationText!.isNotEmpty && _dropoffLocationText != null && _dropoffLocationText!.isNotEmpty)
                           Padding(

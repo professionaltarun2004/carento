@@ -4,6 +4,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:carento/features/auth/presentation/screens/phone_auth_screen.dart';
 import 'package:carento/features/home/presentation/screens/home_screen.dart';
 import 'package:carento/core/constants/app_constants.dart';
+import 'package:carento/features/auth/presentation/screens/signup_screen.dart';
+import 'package:flutter/services.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -26,10 +29,19 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _clearError() {
+    if (_errorMessage != null) {
+      setState(() => _errorMessage = null);
+    }
+  }
+
   Future<void> _signInWithEmailAndPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -41,67 +53,142 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
     } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Authentication failed';
-      if (e.code == 'user-not-found') {
-        errorMessage = 'No user found with this email';
-      } else if (e.code == 'wrong-password') {
-        errorMessage = 'Wrong password provided';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'Invalid email address';
-      } else if (e.code == 'user-disabled') {
-        errorMessage = 'This account has been disabled';
-      } else if (e.code == 'too-many-requests') {
-        errorMessage = 'Too many attempts. Please try again later';
+      String message;
+      switch (e.code) {
+        case 'user-not-found':
+          message = 'No user found with this email.';
+          break;
+        case 'wrong-password':
+          message = 'Wrong password provided.';
+          break;
+        case 'invalid-email':
+          message = 'The email address is invalid.';
+          break;
+        case 'user-disabled':
+          message = 'This user has been disabled.';
+          break;
+        case 'too-many-requests':
+          message = 'Too many attempts. Please try again later.';
+          break;
+        case 'network-request-failed':
+          message = 'Network error. Please check your connection.';
+          break;
+        default:
+          message = 'An error occurred. Please try again.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMessage)),
-      );
+      setState(() => _errorMessage = message);
+    } on PlatformException catch (e) {
+      String message;
+      switch (e.code) {
+        case 'sign_in_canceled':
+          message = 'Sign in was canceled.';
+          break;
+        case 'network_error':
+          message = 'Network error occurred. Please check your connection.';
+          break;
+        case 'sign_in_failed':
+          message = 'Sign in failed. Please try again.';
+          break;
+        default:
+          message = 'An error occurred. Please try again.';
+      }
+      setState(() => _errorMessage = message);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Authentication failed: \\${e.toString()}')),
-      );
+      setState(() => _errorMessage = 'An unexpected error occurred. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+        signInOption: SignInOption.standard,
+      );
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      
       if (googleUser == null) {
         setState(() => _isLoading = false);
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+      try {
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Google sign in failed';
-      if (e.code == 'account-exists-with-different-credential') {
-        errorMessage = 'Account already exists with different credentials';
-      } else if (e.code == 'invalid-credential') {
-        errorMessage = 'Invalid credentials';
-      } else if (e.code == 'operation-not-allowed') {
-        errorMessage = 'Google sign in is not enabled';
+        await FirebaseAuth.instance.signInWithCredential(credential);
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } catch (e) {
+        String message;
+        if (e is FirebaseAuthException) {
+          switch (e.code) {
+            case 'account-exists-with-different-credential':
+              message = 'Account already exists with different credentials.';
+              break;
+            case 'invalid-credential':
+              message = 'Invalid credentials.';
+              break;
+            case 'operation-not-allowed':
+              message = 'Google sign in is not enabled.';
+              break;
+            case 'network-request-failed':
+              message = 'Network error. Please check your connection.';
+              break;
+            default:
+              message = 'Authentication failed. Please try again.';
+          }
+        } else if (e is PlatformException) {
+          switch (e.code) {
+            case 'sign_in_canceled':
+              message = 'Sign in was canceled.';
+              break;
+            case 'sign_in_failed':
+              message = 'Sign in failed. Please try again.';
+              break;
+            case 'network_error':
+              message = 'Network error occurred. Please check your connection.';
+              break;
+            default:
+              message = 'An error occurred. Please try again.';
+          }
+        } else {
+          message = 'An unexpected error occurred. Please try again.';
+        }
+        setState(() => _errorMessage = message);
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMessage)),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google sign in failed: \\${e.toString()}')),
-      );
+      String message;
+      if (e is PlatformException) {
+        switch (e.code) {
+          case 'sign_in_canceled':
+            message = 'Sign in was canceled.';
+            break;
+          case 'sign_in_failed':
+            message = 'Sign in failed. Please try again.';
+            break;
+          case 'network_error':
+            message = 'Network error occurred. Please check your connection.';
+            break;
+          default:
+            message = 'An error occurred. Please try again.';
+        }
+      } else {
+        message = 'An unexpected error occurred. Please try again.';
+      }
+      setState(() => _errorMessage = message);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -128,6 +215,38 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
+                  if (_errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: _clearError,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -135,6 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       labelText: 'Email',
                       prefixIcon: Icon(Icons.email_outlined),
                     ),
+                    onChanged: (_) => _clearError(),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
@@ -161,6 +281,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                     ),
+                    onChanged: (_) => _clearError(),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your password';
@@ -174,8 +295,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _isLoading ? null : _signInWithEmailAndPassword,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                     child: _isLoading
-                        ? const CircularProgressIndicator()
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Sign In'),
                   ),
                   const SizedBox(height: 16),
@@ -192,6 +320,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: _isLoading ? null : _signInWithGoogle,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                     icon: Image.network(
                       'https://www.google.com/favicon.ico',
                       height: 24,
@@ -200,14 +331,29 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const PhoneAuthScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const PhoneAuthScreen(),
+                              ),
+                            );
+                          },
                     child: const Text('Continue with Phone Number'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const SignupScreen(),
+                              ),
+                            );
+                          },
+                    child: const Text('Don\'t have an account? Sign Up'),
                   ),
                 ],
               ),

@@ -18,6 +18,11 @@ class AppConstants {
   static const String bookingCompleted = 'completed';
   static const String bookingCancelled = 'cancelled';
   
+  // Cancellation Policy
+  static const int cancellationWindowHours = 24; // Hours before pickup time
+  static const double cancellationFeePercentage = 0.2; // 20% cancellation fee
+  static const double lateCancellationFeePercentage = 0.5; // 50% fee for late cancellation
+  
   // Storage Paths
   static const String carImagesPath = 'car_images';
   static const String userProfileImagesPath = 'profile_images';

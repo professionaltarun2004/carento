@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:carento/core/constants/app_constants.dart';
 import 'package:carento/features/booking/presentation/widgets/booking_card.dart';
+import 'package:carento/features/booking/domain/models/booking_model.dart';
 
 class BookingHistoryScreen extends StatelessWidget {
   const BookingHistoryScreen({super.key});
@@ -34,7 +35,7 @@ class BookingHistoryScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.error_outline, color: Colors.red, size: 48),
+                      const Icon(Icons.error_outline, color: Colors.red, size: 48),
                       const SizedBox(height: 16),
                       Text(
                         'A Firestore index is required for this query.',
@@ -69,9 +70,9 @@ class BookingHistoryScreen extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             itemCount: bookings.length,
             itemBuilder: (context, index) {
-              final booking = bookings[index].data() as Map<String, dynamic>;
+              final booking = BookingModel.fromFirestore(bookings[index]);
               return BookingCard(
-                booking: booking,
+                booking: booking.toMap(),
                 onTap: () => _showBookingDetails(context, booking),
               );
             },
@@ -81,7 +82,7 @@ class BookingHistoryScreen extends StatelessWidget {
     );
   }
 
-  void _showBookingDetails(BuildContext context, Map<String, dynamic> booking) {
+  void _showBookingDetails(BuildContext context, BookingModel booking) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -99,44 +100,173 @@ class BookingHistoryScreen extends StatelessWidget {
             _buildDetailRow(
               context,
               'Status',
-              booking['status'] ?? 'N/A',
+              booking.status,
               showStatusChip: true,
             ),
             _buildDetailRow(
               context,
               'Car',
-              booking['carName'] ?? 'N/A',
+              booking.carName,
             ),
             _buildDetailRow(
               context,
               'Pickup Date',
-              _formatDate(booking['pickupDate']),
+              _formatDate(booking.pickupDate),
             ),
             _buildDetailRow(
               context,
               'Drop-off Date',
-              _formatDate(booking['dropoffDate']),
+              _formatDate(booking.dropoffDate),
             ),
             _buildDetailRow(
               context,
               'Total Amount',
-              '₹${booking['totalAmount']}',
+              '₹${booking.totalAmount}',
             ),
-            const SizedBox(height: 16),
-            if (booking['status'] == AppConstants.bookingPending)
-              ElevatedButton(
-                onPressed: () {
-                  // TODO: Implement cancel booking
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
+            if (booking.cancelledAt != null) ...[
+              const SizedBox(height: 8),
+              _buildDetailRow(
+                context,
+                'Cancelled On',
+                _formatDate(booking.cancelledAt!),
+              ),
+              if (booking.cancellationFee != null)
+                _buildDetailRow(
+                  context,
+                  'Cancellation Fee',
+                  '₹${booking.cancellationFee}',
                 ),
-                child: const Text('Cancel Booking'),
+              if (booking.cancellationReason != null)
+                _buildDetailRow(
+                  context,
+                  'Cancellation Reason',
+                  booking.cancellationReason!,
+                ),
+            ],
+            const SizedBox(height: 16),
+            if (booking.canBeCancelled())
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Cancellation Policy',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '• Free cancellation up to ${AppConstants.cancellationWindowHours} hours before pickup\n'
+                    '• ${(AppConstants.cancellationFeePercentage * 100).toInt()}% fee if cancelled within ${AppConstants.cancellationWindowHours} hours\n'
+                    '• ${(AppConstants.lateCancellationFeePercentage * 100).toInt()}% fee for late cancellations',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => _showCancellationDialog(context, booking),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Cancel Booking'),
+                  ),
+                ],
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showCancellationDialog(BuildContext context, BookingModel booking) async {
+    final reasonController = TextEditingController();
+    final cancellationFee = booking.calculateCancellationFee();
+    
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Booking'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to cancel this booking?',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Cancellation Fee: ₹$cancellationFee',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason for cancellation',
+                hintText: 'Please provide a reason for cancellation',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No, Keep Booking'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (reasonController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please provide a reason for cancellation'),
+                  ),
+                );
+                return;
+              }
+
+              try {
+                await FirebaseFirestore.instance
+                    .collection(AppConstants.bookingsCollection)
+                    .doc(booking.id)
+                    .update({
+                  'status': AppConstants.bookingCancelled,
+                  'cancelledAt': FieldValue.serverTimestamp(),
+                  'cancellationFee': cancellationFee,
+                  'cancellationReason': reasonController.text.trim(),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+
+                if (context.mounted) {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context); // Close bottom sheet
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Booking cancelled successfully'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error cancelling booking: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Yes, Cancel Booking'),
+          ),
+        ],
       ),
     );
   }
@@ -206,9 +336,7 @@ class BookingHistoryScreen extends StatelessWidget {
     );
   }
 
-  String _formatDate(dynamic timestamp) {
-    if (timestamp == null) return 'N/A';
-    final date = (timestamp as Timestamp).toDate();
+  String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
 } 
